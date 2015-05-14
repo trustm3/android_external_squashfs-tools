@@ -24,7 +24,6 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#include <selinux/android.h>
 #include <selinux/label.h>
 #include <selinux/selinux.h>
 
