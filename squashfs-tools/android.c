@@ -42,10 +42,10 @@ void alloc_mounted_path(const char *mount_point, const char *subpath, char **mou
     strcat(*mounted_path, subpath);
 }
 
-void android_fs_config(const char *path, struct stat *stat) {
+void android_fs_config(const char *path, struct stat *stat, const char *target_out_path) {
     unsigned long capabilities = 0;
-    fs_config(path, S_ISDIR(stat->st_mode), &stat->st_uid, &stat->st_gid, &stat->st_mode,
-            &capabilities);
+    fs_config(path, S_ISDIR(stat->st_mode), target_out_path,
+              &stat->st_uid, &stat->st_gid, &stat->st_mode, &capabilities);
 }
 
 
