@@ -83,6 +83,7 @@
 int android_config = FALSE;
 char *context_file = NULL;
 char *mount_point = NULL;
+char *target_out_path = NULL;
 #endif
 /* ANDROID CHANGES END */
 
@@ -3054,10 +3055,10 @@ inline void add_dir_entry(struct dir_ent *dir_ent, struct dir_info *sub_dir,
 		if (mount_point) {
 			char *mounted_path;
 			alloc_mounted_path(mount_point, subpathname(dir_ent), &mounted_path);
-			android_fs_config(mounted_path, &inode_info->buf);
+			android_fs_config(mounted_path, &inode_info->buf, target_out_path);
 			free(mounted_path);
 		} else {
-			android_fs_config(pathname(dir_ent), &inode_info->buf);
+			android_fs_config(pathname(dir_ent), &inode_info->buf, target_out_path);
 		}
 	}
 #endif
@@ -3158,9 +3159,9 @@ void dir_scan(squashfs_inode *inode, char *pathname,
 #ifdef ANDROID
 		if (android_config)
 			if (mount_point)
-				android_fs_config(mount_point, &buf);
+				android_fs_config(mount_point, &buf, target_out_path);
 			else
-				android_fs_config(pathname, &buf);
+				android_fs_config(pathname, &buf, target_out_path);
 #endif
 /* ANDROID CHANGES END */
 		dir_ent->inode = lookup_inode(&buf);
@@ -5603,6 +5604,14 @@ print_compressor_options:
 			}
 			mount_point = argv[i];
 		}
+		else if(strcmp(argv[i], "-product-out") == 0) {
+			if(++i == argc) {
+				ERROR("%s: -product-out: missing path name\n",
+					argv[0]);
+				exit(1);
+			}
+			target_out_path = argv[i];
+		}
 #endif
 /* ANDROID CHANGES END */
 
@@ -5673,6 +5682,8 @@ printOptions:
 			ERROR("-mount-point <name>\tNeed to be provided when "
 				"android-fs-config or context-file\n\t\t\tare "
 				"enabled and source directory is not mount point\n");
+			ERROR("-product-out <path>\tPRODUCT_OUT directory to "
+                                "read device specific FS rules files from\n");
 #endif
 /* ANDROID CHANGES END */
 			ERROR("\nFilesystem filter options:\n");
