@@ -33,6 +33,8 @@
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
+extern char *mount_point;
+
 void alloc_mounted_path(const char *mount_point, const char *subpath, char **mounted_path) {
     *mounted_path = malloc(strlen(mount_point) + strlen(subpath) + 1);
     if (*mounted_path == NULL) {
@@ -45,6 +47,9 @@ void alloc_mounted_path(const char *mount_point, const char *subpath, char **mou
 
 void android_fs_config(fs_config_func_t fs_config_func, const char *path, struct stat *stat,
         const char *target_out_path, uint64_t *capabilities) {
+    char *_path = path;
+    if (mount_point && mount_point[0] == '/') _path++;
+
     // filesystem_config does not preserve file type bits
     mode_t stat_file_type_mask = stat->st_mode & S_IFMT;
     if (fs_config_func)
@@ -86,7 +91,10 @@ char *set_selabel(const char *path, unsigned int mode, struct selabel_handle *se
         strncpy(full_name + 1, path, full_name_size - 1);
 
         if (selabel_lookup(sehnd, &secontext, full_name, mode)) {
-            secontext = strdup("u:object_r:unlabeled:s0");
+            if (mount_point && mount_point[0] == '/')
+                secontext = strdup("u:object_r:rootfs:s0");
+            else
+                secontext = strdup("u:object_r:unlabeled:s0");
         }
 
         free(full_name);
