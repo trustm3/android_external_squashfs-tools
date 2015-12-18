@@ -3054,8 +3054,13 @@ inline void add_dir_entry(struct dir_ent *dir_ent, struct dir_info *sub_dir,
 	if (android_config) {
 		if (mount_point) {
 			char *mounted_path;
+			char *rel_path;
+
 			alloc_mounted_path(mount_point, subpathname(dir_ent), &mounted_path);
-			android_fs_config(mounted_path, &inode_info->buf, target_out_path);
+			rel_path = mounted_path;
+			while (rel_path && *rel_path == '/')
+				rel_path++;
+			android_fs_config(rel_path, &inode_info->buf, target_out_path);
 			free(mounted_path);
 		} else {
 			android_fs_config(pathname(dir_ent), &inode_info->buf, target_out_path);
