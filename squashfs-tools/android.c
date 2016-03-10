@@ -30,6 +30,7 @@
 
 #include "android.h"
 #include "private/android_filesystem_config.h"
+#include "private/android_filesystem_capability.h"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
@@ -43,10 +44,9 @@ void alloc_mounted_path(const char *mount_point, const char *subpath, char **mou
     strcat(*mounted_path, subpath);
 }
 
-void android_fs_config(const char *path, struct stat *stat, const char *target_out_path) {
-    unsigned long capabilities = 0;
+void android_fs_config(const char *path, struct stat *stat, const char *target_out_path, uint64_t *capabilities) {
     fs_config(path, S_ISDIR(stat->st_mode), target_out_path,
-              &stat->st_uid, &stat->st_gid, &stat->st_mode, &capabilities);
+              &stat->st_uid, &stat->st_gid, &stat->st_mode, capabilities);
 }
 
 
@@ -90,4 +90,20 @@ char *set_selabel(const char *path, unsigned int mode, struct selabel_handle *se
     }
     perror("Selabel handle is NULL.");
     exit(EXIT_FAILURE);
+}
+
+struct vfs_cap_data set_caps(uint64_t capabilities) {
+    struct vfs_cap_data cap_data;
+    memset(&cap_data, 0, sizeof(cap_data));
+
+    if (capabilities == 0)
+        return cap_data;
+
+    cap_data.magic_etc = VFS_CAP_REVISION | VFS_CAP_FLAGS_EFFECTIVE;
+    cap_data.data[0].permitted = (uint32_t) capabilities;
+    cap_data.data[0].inheritable = 0;
+    cap_data.data[1].permitted = (uint32_t) (capabilities >> 32);
+    cap_data.data[1].inheritable = 0;
+
+    return cap_data;
 }

@@ -3037,6 +3037,11 @@ inline struct dir_ent *create_dir_entry(char *name, char *source_name,
 	dir_ent->our_dir = dir;
 	dir_ent->inode = NULL;
 	dir_ent->next = NULL;
+/* ANDROID CHANGES START*/
+#ifdef ANDROID
+	dir_ent->capabilities = 0;
+#endif
+/* ANDROID CHANGES END */
 
 	return dir_ent;
 }
@@ -3061,10 +3066,10 @@ inline void add_dir_entry(struct dir_ent *dir_ent, struct dir_info *sub_dir,
 			rel_path = mounted_path;
 			while (rel_path && *rel_path == '/')
 				rel_path++;
-			android_fs_config(rel_path, &inode_info->buf, target_out_path);
+			android_fs_config(rel_path, &inode_info->buf, target_out_path, &dir_ent->capabilities);
 			free(mounted_path);
 		} else {
-			android_fs_config(pathname(dir_ent), &inode_info->buf, target_out_path);
+			android_fs_config(pathname(dir_ent), &inode_info->buf, target_out_path, &dir_ent->capabilities);
 		}
 	}
 #endif
@@ -3133,6 +3138,11 @@ void dir_scan(squashfs_inode *inode, char *pathname,
 {
 	struct stat buf;
 	struct dir_ent *dir_ent;
+/* ANDROID CHANGES START*/
+#ifdef ANDROID
+	uint64_t caps = 0;
+#endif
+/* ANDROID CHANGES END */
 	
 	root_dir = dir_scan1(pathname, "", paths, _readdir, 1);
 	if(root_dir == NULL)
@@ -3163,15 +3173,22 @@ void dir_scan(squashfs_inode *inode, char *pathname,
 				pathname, strerror(errno));
 /* ANDROID CHANGES START*/
 #ifdef ANDROID
-		if (android_config)
+		if (android_config) {
 			if (mount_point)
-				android_fs_config(mount_point, &buf, target_out_path);
+				android_fs_config(mount_point, &buf, target_out_path, &caps);
 			else
-				android_fs_config(pathname, &buf, target_out_path);
+				android_fs_config(pathname, &buf, target_out_path, &caps);
+		}
 #endif
 /* ANDROID CHANGES END */
 		dir_ent->inode = lookup_inode(&buf);
 	}
+
+/* ANDROID CHANGES START*/
+#ifdef ANDROID
+	dir_ent->capabilities = caps;
+#endif
+/* ANDROID CHANGES END */
 
 	dir_ent->dir = root_dir;
 	root_dir->dir_ent = dir_ent;
