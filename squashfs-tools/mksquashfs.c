@@ -51,6 +51,10 @@
 #include <limits.h>
 #include <ctype.h>
 
+#ifndef FNM_EXTMATCH /* glibc extension */
+    #define FNM_EXTMATCH 0
+#endif
+
 #ifndef linux
 #define __BYTE_ORDER BYTE_ORDER
 #define __BIG_ENDIAN BIG_ENDIAN
@@ -838,13 +842,13 @@ char *subpathname(struct dir_ent *dir_ent)
 }
 
 
-inline unsigned int get_inode_no(struct inode_info *inode)
+static inline unsigned int get_inode_no(struct inode_info *inode)
 {
 	return inode->inode_number;
 }
 
 
-inline unsigned int get_parent_no(struct dir_info *dir)
+static inline unsigned int get_parent_no(struct dir_info *dir)
 {
 	return dir->depth ? get_inode_no(dir->dir_ent->inode) : inode_no;
 }
@@ -2037,7 +2041,7 @@ struct file_info *duplicate(long long file_size, long long bytes,
 }
 
 
-inline int is_fragment(struct inode_info *inode)
+static inline int is_fragment(struct inode_info *inode)
 {
 	off_t file_size = inode->buf.st_size;
 
@@ -3000,19 +3004,19 @@ struct inode_info *lookup_inode3(struct stat *buf, int pseudo, int id,
 }
 
 
-struct inode_info *lookup_inode2(struct stat *buf, int pseudo, int id)
+static inline struct inode_info *lookup_inode2(struct stat *buf, int pseudo, int id)
 {
 	return lookup_inode3(buf, pseudo, id, NULL, 0);
 }
 
 
-inline struct inode_info *lookup_inode(struct stat *buf)
+static inline struct inode_info *lookup_inode(struct stat *buf)
 {
 	return lookup_inode2(buf, 0, 0);
 }
 
 
-inline void alloc_inode_no(struct inode_info *inode, unsigned int use_this)
+static inline void alloc_inode_no(struct inode_info *inode, unsigned int use_this)
 {
 	if (inode->inode_number == 0) {
 		inode->inode_number = use_this ? : inode_no ++;
@@ -3023,7 +3027,7 @@ inline void alloc_inode_no(struct inode_info *inode, unsigned int use_this)
 }
 
 
-inline struct dir_ent *create_dir_entry(char *name, char *source_name,
+static inline struct dir_ent *create_dir_entry(char *name, char *source_name,
 	char *nonstandard_pathname, struct dir_info *dir)
 {
 	struct dir_ent *dir_ent = malloc(sizeof(struct dir_ent));
@@ -3046,7 +3050,7 @@ inline struct dir_ent *create_dir_entry(char *name, char *source_name,
 }
 
 
-inline void add_dir_entry(struct dir_ent *dir_ent, struct dir_info *sub_dir,
+static inline void add_dir_entry(struct dir_ent *dir_ent, struct dir_info *sub_dir,
 	struct inode_info *inode_info)
 {
 	struct dir_info *dir = dir_ent->our_dir;
@@ -3082,18 +3086,7 @@ inline void add_dir_entry(struct dir_ent *dir_ent, struct dir_info *sub_dir,
 	dir->count++;
 }
 
-/* ANDROID CHANGES START*/
-#ifdef ANDROID
-/* Weird linker bug that complains those inline functions are undefined. */
-extern inline void add_dir_entry(struct dir_ent *dir_ent, struct dir_info *sub_dir,
-	struct inode_info *inode_info);
-extern inline void add_dir_entry2(char *name, char *source_name,
-	char *nonstandard_pathname, struct dir_info *sub_dir,
-	struct inode_info *inode_info, struct dir_info *dir);
-#endif
-/* ANDROID CHANGES END */
-
-inline void add_dir_entry2(char *name, char *source_name,
+static inline void add_dir_entry2(char *name, char *source_name,
 	char *nonstandard_pathname, struct dir_info *sub_dir,
 	struct inode_info *inode_info, struct dir_info *dir)
 {
@@ -3105,7 +3098,7 @@ inline void add_dir_entry2(char *name, char *source_name,
 }
 
 
-inline void free_dir_entry(struct dir_ent *dir_ent)
+static inline void free_dir_entry(struct dir_ent *dir_ent)
 {
 	if(dir_ent->name)
 		free(dir_ent->name);
@@ -3126,7 +3119,7 @@ inline void free_dir_entry(struct dir_ent *dir_ent)
 }
 
 
-inline void add_excluded(struct dir_info *dir)
+static inline void add_excluded(struct dir_info *dir)
 {
 	dir->excluded ++;
 }
@@ -4258,6 +4251,7 @@ void initialise_threads(int readq, int fragq, int bwriteq, int fwriteq,
 	sigemptyset(&sigmask);
 	sigaddset(&sigmask, SIGQUIT);
 	sigaddset(&sigmask, SIGHUP);
+	sigaddset(&sigmask, SIGALRM);
 	if(pthread_sigmask(SIG_BLOCK, &sigmask, NULL) == -1)
 		BAD_ERROR("Failed to set signal mask in intialise_threads\n");
 
@@ -5041,19 +5035,46 @@ int parse_num(char *arg, int *res)
 
 int get_physical_memory()
 {
-	/*
-	 * Long longs are used here because with PAE, a 32-bit
-	 * machine can have more than 4GB of physical memory
-	 *
-	 * sysconf(_SC_PHYS_PAGES) relies on /proc being mounted.
-	 * If it isn't fail.
-	 */
+	int phys_mem;
+#ifndef linux
+	#ifdef HW_MEMSIZE
+		#define SYSCTL_PHYSMEM HW_MEMSIZE
+	#elif defined(HW_PHYSMEM64)
+		#define SYSCTL_PHYSMEM HW_PHYSMEM64
+	#else
+		#define SYSCTL_PHYSMEM HW_PHYSMEM
+	#endif
+
+	int mib[2];
+	uint64_t sysctl_physmem = 0;
+	size_t sysctl_len = sizeof(sysctl_physmem);
+
+	mib[0] = CTL_HW;
+	mib[1] = SYSCTL_PHYSMEM;
+
+	if(sysctl(mib, 2, &sysctl_physmem, &sysctl_len, NULL, 0) == 0) {
+		/* some systems use 32-bit values, work with what we're given */
+		if (sysctl_len == 4)
+			sysctl_physmem = *(uint32_t*)&sysctl_physmem;
+		phys_mem = sysctl_physmem >> 20;
+	} else {
+		ERROR_START("Failed to get amount of available "
+			"memory.");
+		ERROR_EXIT("  Defaulting to least viable amount\n");
+		phys_mem = SQUASHFS_LOWMEM;
+	}
+  #undef SYSCTL_PHYSMEM
+#else
+	/* Long longs are used here because with PAE, a 32-bit
+	  machine can have more than 4GB of physical memory */
+
 	long long num_pages = sysconf(_SC_PHYS_PAGES);
 	long long page_size = sysconf(_SC_PAGESIZE);
-	int phys_mem = num_pages * page_size >> 20;
-
+	phys_mem = num_pages * page_size >> 20;
 	if(num_pages == -1 || page_size == -1)
 		return 0;
+
+#endif
 
 	if(phys_mem < SQUASHFS_LOWMEM)
 		BAD_ERROR("Mksquashfs requires more physical memory than is "
