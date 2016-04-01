@@ -29,6 +29,7 @@
 #include <stdint.h>
 #endif
 /* ANDROID CHANGES END */
+#include <pthread.h>
 
 struct dir_info {
 	char			*pathname;
