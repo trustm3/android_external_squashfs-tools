@@ -22,6 +22,14 @@
  * xattr.c
  */
 
+#ifndef linux
+#define __BYTE_ORDER BYTE_ORDER
+#define __BIG_ENDIAN BIG_ENDIAN
+#define __LITTLE_ENDIAN LITTLE_ENDIAN
+#else
+#include <endian.h>
+#endif
+
 #define TRUE 1
 #define FALSE 0
 
@@ -35,6 +43,13 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/xattr.h>
+
+#ifdef XATTR_NOFOLLOW /* Apple's xattrs */
+    #define llistxattr(path_, buf_, sz_) \
+        listxattr(path_, buf_, sz_, XATTR_NOFOLLOW)
+    #define lgetxattr(path_, name_, val_, sz_) \
+        getxattr(path_, name_, val_, sz_, 0, XATTR_NOFOLLOW)
+#endif
 
 #include "squashfs_fs.h"
 #include "squashfs_swap.h"
