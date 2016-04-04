@@ -5,7 +5,7 @@ LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
 # squashfs-tools depends on Linux Kernel specific headers (e.g. sysinfo.h).
-LOCAL_MODULE_HOST_OS := linux
+LOCAL_MODULE_HOST_OS := linux darwin
 
 # The LOCAL_MODULE name is referenced by the code. Don't change it.
 LOCAL_MODULE := mksquashfs
