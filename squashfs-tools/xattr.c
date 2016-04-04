@@ -61,7 +61,11 @@
 /* ANDROID CHANGES START*/
 #ifdef ANDROID
 #include "android.h"
-#include "private/android_filesystem_capability.h"
+#ifdef __ANDROID__
+#include <linux/capability.h>
+#else
+#include <private/android_filesystem_capability.h>
+#endif
 static struct selabel_handle *sehnd = NULL;
 #endif
 /* ANDROID CHANGES END */
