@@ -29,6 +29,7 @@
 
 #include "android.h"
 #include "private/android_filesystem_config.h"
+#include "private/canned_fs_config.h"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
@@ -42,9 +43,14 @@ void alloc_mounted_path(const char *mount_point, const char *subpath, char **mou
     strcat(*mounted_path, subpath);
 }
 
-void android_fs_config(const char *path, struct stat *stat, const char *target_out_path, uint64_t *capabilities) {
-    fs_config(path, S_ISDIR(stat->st_mode), target_out_path,
-              &stat->st_uid, &stat->st_gid, &stat->st_mode, capabilities);
+void android_fs_config(fs_config_func_t fs_config_func, const char *path, struct stat *stat,
+        const char *target_out_path, uint64_t *capabilities) {
+    // filesystem_config does not preserve file type bits
+    mode_t stat_file_type_mask = stat->st_mode & S_IFMT;
+    if (fs_config_func)
+        fs_config_func(path, S_ISDIR(stat->st_mode), target_out_path,
+                  &stat->st_uid, &stat->st_gid, &stat->st_mode, capabilities);
+    stat->st_mode |= stat_file_type_mask;
 }
 
 

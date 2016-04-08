@@ -84,10 +84,13 @@
 /* ANDROID CHANGES START*/
 #ifdef ANDROID
 #include "android.h"
+#include "private/android_filesystem_config.h"
+#include "private/canned_fs_config.h"
 int android_config = FALSE;
 char *context_file = NULL;
 char *mount_point = NULL;
 char *target_out_path = NULL;
+fs_config_func_t fs_config_func = NULL;
 #endif
 /* ANDROID CHANGES END */
 
@@ -3069,10 +3072,10 @@ static inline void add_dir_entry(struct dir_ent *dir_ent, struct dir_info *sub_d
 			rel_path = mounted_path;
 			while (rel_path && *rel_path == '/')
 				rel_path++;
-			android_fs_config(rel_path, &inode_info->buf, target_out_path, &dir_ent->capabilities);
+			android_fs_config(fs_config_func, rel_path, &inode_info->buf, target_out_path, &dir_ent->capabilities);
 			free(mounted_path);
 		} else {
-			android_fs_config(pathname(dir_ent), &inode_info->buf, target_out_path, &dir_ent->capabilities);
+			android_fs_config(fs_config_func, pathname(dir_ent), &inode_info->buf, target_out_path, &dir_ent->capabilities);
 		}
 	}
 #endif
@@ -3167,9 +3170,9 @@ void dir_scan(squashfs_inode *inode, char *pathname,
 #ifdef ANDROID
 		if (android_config) {
 			if (mount_point)
-				android_fs_config(mount_point, &buf, target_out_path, &caps);
+				android_fs_config(fs_config_func, mount_point, &buf, target_out_path, &caps);
 			else
-				android_fs_config(pathname, &buf, target_out_path, &caps);
+				android_fs_config(fs_config_func, pathname, &buf, target_out_path, &caps);
 		}
 #endif
 /* ANDROID CHANGES END */
@@ -5210,6 +5213,11 @@ int main(int argc, char *argv[])
 	int progress = TRUE;
 	int force_progress = FALSE;
 	struct file_buffer **fragment = NULL;
+/* ANDROID CHANGES START*/
+#ifdef ANDROID
+	const char *fs_config_file = NULL;
+#endif
+/* ANDROID CHANGES END */
 
 	if(argc > 1 && strcmp(argv[1], "-version") == 0) {
 		VERSION();
@@ -5619,6 +5627,14 @@ print_compressor_options:
 			}
 			context_file = argv[i];
 		}
+		else if(strcmp(argv[i], "-fs-config-file") == 0) {
+			if(++i == argc) {
+				ERROR("%s: -fs-config-file: missing file name\n",
+					argv[0]);
+				exit(1);
+			}
+			fs_config_file = argv[i];
+		}
 #endif
 /* ANDROID CHANGES END */
 		else if(strcmp(argv[i], "-nopad") == 0)
@@ -5696,6 +5712,8 @@ printOptions:
 			ERROR("-context-file <file>\tApply selinux security "
 				"xattrs from context-file instead\n\t\t\t"
 				"of reading xattrs from file system\n");
+			ERROR("-fs-config-file <file>\tAndroid specific "
+				"filesystem config file\n");
 #endif
 /* ANDROID CHANGES END */
 			ERROR("-noI\t\t\tdo not compress inode table\n");
@@ -5797,6 +5815,20 @@ printOptions:
 			exit(1);
 		}
 	}
+
+/* ANDROID CHANGES START*/
+#ifdef ANDROID
+	if (fs_config_file) {
+		if (load_canned_fs_config(fs_config_file) < 0) {
+			fprintf(stderr, "failed to load %s\n", fs_config_file);
+			exit(1);
+		}
+		fs_config_func = canned_fs_config;
+	} else if (mount_point) {
+		fs_config_func = fs_config;
+	}
+#endif
+/* ANDROID CHANGES END */
 
 	/*
 	 * Some compressors may need the options to be checked for validity
