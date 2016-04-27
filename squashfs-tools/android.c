@@ -40,6 +40,19 @@ void alloc_mounted_path(const char *mount_point, const char *subpath, char **mou
         exit(EXIT_FAILURE);
     }
     strcpy(*mounted_path, mount_point);
+
+    // Avoid constructing a path with '//' even if mksquashfs is called
+    // with a mount point that ends with a slash (e.g. '-mount-point /').
+    // Path names with double-slashes like "//system/path/to/file" are not
+    // properly recognized by fs_config() in libcutils (which is called by
+    // android_fs_config() below), and the result is a corrupted squashfs
+    // image with completely wrong uid, gid, mode, and capabilities.
+    // TODO(yusukes): Upstream the fix.
+    if (strlen(mount_point) > 0 && mount_point[strlen(mount_point) - 1] == '/' &&
+        subpath[0] == '/') {
+        ++subpath;
+    }
+
     strcat(*mounted_path, subpath);
 }
 
