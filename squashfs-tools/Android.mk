@@ -31,7 +31,8 @@ LOCAL_SRC_FILES := \
     lz4_wrapper.c
 
 LOCAL_CFLAGS := -I -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_GNU_SOURCE -Wall \
-                -DCOMP_DEFAULT="\"lz4\"" -DGZIP_SUPPORT -DLZ4_SUPPORT -DXATTR_SUPPORT -DXATTR_DEFAULT
+                -DCOMP_DEFAULT="\"lz4\"" -DGZIP_SUPPORT -DLZ4_SUPPORT -DXATTR_SUPPORT -DXATTR_DEFAULT \
+                -Wno-unused-parameter
 
 LOCAL_LDLIBS := -lpthread -lm -lz
 
