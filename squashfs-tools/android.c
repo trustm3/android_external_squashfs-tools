@@ -29,7 +29,6 @@
 
 #include "android.h"
 #include "private/android_filesystem_config.h"
-#include "private/android_filesystem_capability.h"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
