@@ -110,6 +110,7 @@ int nopad = FALSE;
 int exit_on_error = FALSE;
 
 long long global_uid = -1, global_gid = -1;
+long long uid_shift = 0, gid_shift = 0;
 
 /* superblock attributes */
 int block_size = SQUASHFS_FILE_SIZE, block_log;
@@ -898,11 +899,11 @@ int create_inode(squashfs_inode *i_no, struct dir_info *dir_info,
 	}
 			
 	base->mode = SQUASHFS_MODE(buf->st_mode);
-	base->uid = get_uid((unsigned int) global_uid == -1 ?
-		buf->st_uid : global_uid);
+	base->uid = get_uid(((unsigned int) (global_uid == -1 ?
+		buf->st_uid : global_uid) + uid_shift));
 	base->inode_type = type;
-	base->guid = get_guid((unsigned int) global_gid == -1 ?
-		buf->st_gid : global_gid);
+	base->guid = get_guid(((unsigned int) (global_gid == -1 ?
+		buf->st_gid : global_gid) + gid_shift));
 	base->mtime = buf->st_mtime;
 	base->inode_number = get_inode_no(dir_ent->inode);
 
@@ -5544,6 +5545,52 @@ print_compressor_options:
 					exit(1);
 				}
 			}
+		} else if(strcmp(argv[i], "-shift-uid") == 0) {
+			if(++i == argc) {
+				ERROR("%s: -shift-uid missing uid or user\n",
+					argv[0]);
+				exit(1);
+			}
+			if((uid_shift = strtoll(argv[i], &b, 10)), *b =='\0') {
+				if(uid_shift < 0 || uid_shift >
+						(((long long) 1 << 32) - 1)) {
+					ERROR("%s: -shift-uid uid out of range"
+						"\n", argv[0]);
+					exit(1);
+				}
+			} else {
+				struct passwd *uid = getpwnam(argv[i]);
+				if(uid)
+					uid_shift = uid->pw_uid;
+				else {
+					ERROR("%s: -shift-uid invalid uid or "
+						"unknown user\n", argv[0]);
+					exit(1);
+				}
+			}
+		} else if(strcmp(argv[i], "-shift-gid") == 0) {
+			if(++i == argc) {
+				ERROR("%s: -shift-gid missing gid or user\n",
+					argv[0]);
+				exit(1);
+			}
+			if((gid_shift = strtoll(argv[i], &b, 10)), *b =='\0') {
+				if(gid_shift < 0 || gid_shift >
+						(((long long) 1 << 32) - 1)) {
+					ERROR("%s: -shift-gid gid out of range"
+						"\n", argv[0]);
+					exit(1);
+				}
+			} else {
+				struct passwd *gid = getpwnam(argv[i]);
+				if(gid)
+					gid_shift = gid->pw_gid;
+				else {
+					ERROR("%s: -shift-gid invalid gid or "
+						"unknown user\n", argv[0]);
+					exit(1);
+				}
+			}
 		} else if(strcmp(argv[i], "-noI") == 0 ||
 				strcmp(argv[i], "-noInodeCompression") == 0)
 			noI = TRUE;
@@ -5668,6 +5715,8 @@ printOptions:
 			ERROR("-all-root\t\tmake all files owned by root\n");
 			ERROR("-force-uid uid\t\tset all file uids to uid\n");
 			ERROR("-force-gid gid\t\tset all file gids to gid\n");
+			ERROR("-shift-uid uid\t\tshift all file uids to uid\n");
+			ERROR("-shift-gid gid\t\tshift all file gids to gid\n");
 			ERROR("-nopad\t\t\tdo not pad filesystem to a multiple "
 				"of 4K\n");
 			ERROR("-keep-as-directory\tif one source directory is "
