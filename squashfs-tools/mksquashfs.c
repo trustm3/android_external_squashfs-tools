@@ -3168,12 +3168,12 @@ void dir_scan(squashfs_inode *inode, char *pathname,
 				pathname, strerror(errno));
 /* ANDROID CHANGES START*/
 #ifdef ANDROID
-		if (android_config) {
-			if (mount_point)
-				android_fs_config(fs_config_func, mount_point, &buf, target_out_path, &caps);
-			else
-				android_fs_config(fs_config_func, pathname, &buf, target_out_path, &caps);
-		}
+		buf.st_mode = S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH; // root mode
+		buf.st_uid = 0;
+		buf.st_gid = 0;
+		buf.st_mtime = time(NULL);
+		buf.st_dev = 0;
+		buf.st_ino = 0;
 #endif
 /* ANDROID CHANGES END */
 		dir_ent->inode = lookup_inode(&buf);
