@@ -91,6 +91,7 @@ char *context_file = NULL;
 char *mount_point = NULL;
 char *target_out_path = NULL;
 fs_config_func_t fs_config_func = NULL;
+int compress_thresh_per = 0;
 #endif
 /* ANDROID CHANGES END */
 
@@ -433,7 +434,8 @@ int mangle2(void *strm, char *d, char *s, int size,
 				"code %d\n", comp->name, error);
 	}
 
-	if(c_byte == 0 || c_byte >= size) {
+	if(c_byte == 0 || c_byte >= size ||
+			(c_byte > (size * ((100.0 - compress_thresh_per) / 100.0)))) {
 		memcpy(d, s, size);
 		return size | (data_block ? SQUASHFS_COMPRESSED_BIT_BLOCK :
 			SQUASHFS_COMPRESSED_BIT);
@@ -5635,6 +5637,21 @@ print_compressor_options:
 			}
 			fs_config_file = argv[i];
 		}
+		else if(strcmp(argv[i], "-t") == 0) {
+			if(++i == argc) {
+				ERROR("%s: -t missing compression threshold percentage\n", argv[0]);
+				exit(1);
+			}
+			if(!parse_number(argv[i], &compress_thresh_per, 1)) {
+				ERROR("%s: -t invalid compression threshold percentage\n", argv[0]);
+				exit(1);
+			}
+			if(compress_thresh_per > 100 || compress_thresh_per < 0) {
+				ERROR("%s: -t compression threshold percentage not between 0 and 100\n",
+					argv[0]);
+				exit(1);
+			}
+		}
 #endif
 /* ANDROID CHANGES END */
 		else if(strcmp(argv[i], "-nopad") == 0)
@@ -5714,6 +5731,10 @@ printOptions:
 				"of reading xattrs from file system\n");
 			ERROR("-fs-config-file <file>\tAndroid specific "
 				"filesystem config file\n");
+			ERROR("-t <compress_thresh>\tset minimum "
+				"acceptable compression ratio of a block to\n\t\t\t"
+				"<compress_thresh_per> otherwise don't compress. "
+				"Default 0%\n");
 #endif
 /* ANDROID CHANGES END */
 			ERROR("-noI\t\t\tdo not compress inode table\n");
@@ -5744,7 +5765,7 @@ printOptions:
 				"android-fs-config or context-file\n\t\t\tare "
 				"enabled and source directory is not mount point\n");
 			ERROR("-product-out <path>\tPRODUCT_OUT directory to "
-                                "read device specific FS rules files from\n");
+				"read device specific FS rules files from\n");
 #endif
 /* ANDROID CHANGES END */
 			ERROR("\nFilesystem filter options:\n");
