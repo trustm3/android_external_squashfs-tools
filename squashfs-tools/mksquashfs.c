@@ -92,6 +92,8 @@ char *mount_point = NULL;
 char *target_out_path = NULL;
 fs_config_func_t fs_config_func = NULL;
 int compress_thresh_per = 0;
+int align_4k_blocks = TRUE;
+FILE *block_map_file = NULL;
 #endif
 /* ANDROID CHANGES END */
 
@@ -858,6 +860,26 @@ static inline unsigned int get_parent_no(struct dir_info *dir)
 	return dir->depth ? get_inode_no(dir->dir_ent->inode) : inode_no;
 }
 
+
+/* ANDROID CHANGES START*/
+#ifdef ANDROID
+static inline void write_block_map_entry(char *sub_path, unsigned long long start_block, unsigned long long total_size,
+		char * mount_point, FILE *block_map_file) {
+	if (block_map_file) {
+		unsigned long long round_start = (start_block + (1 << 12) - 1) >> 12;
+		unsigned long long round_end = ((start_block + total_size) >> 12) - 1;
+		if (round_start && total_size && round_start <= round_end) {
+			fprintf(block_map_file, "/%s", mount_point);
+			if (sub_path[0] != '/') fprintf(block_map_file, "/");
+			if (round_start == round_end)
+				fprintf(block_map_file, "%s %lld\n", sub_path, round_start);
+			else
+				fprintf(block_map_file, "%s %lld-%lld\n", sub_path, round_start, round_end);
+		}
+	}
+}
+#endif
+/* ANDROID CHANGES END */
 	
 int create_inode(squashfs_inode *i_no, struct dir_info *dir_info,
 	struct dir_ent *dir_ent, int type, long long byte_size,
@@ -919,6 +941,12 @@ int create_inode(squashfs_inode *i_no, struct dir_info *dir_info,
 		int i;
 		struct squashfs_reg_inode_header *reg = &inode_header.reg;
 		size_t off = offsetof(struct squashfs_reg_inode_header, block_list);
+/* ANDROID CHANGES START*/
+#ifdef ANDROID
+		unsigned long long total_size = 0;
+		char *sub_path;
+#endif
+/* ANDROID CHANGES END */
 
 		inode = get_inode(sizeof(*reg) + offset * sizeof(unsigned int));
 		reg->file_size = byte_size;
@@ -931,10 +959,26 @@ int create_inode(squashfs_inode *i_no, struct dir_info *dir_info,
 			"%d, fragment %d, offset %d, size %d\n", byte_size,
 			start_block, offset, fragment->index, fragment->offset,
 			fragment->size);
-		for(i = 0; i < offset; i++)
+		for(i = 0; i < offset; i++) {
 			TRACE("Block %d, size %d\n", i, block_list[i]);
+			total_size += SQUASHFS_COMPRESSED_SIZE_BLOCK(block_list[i]);
+		}
+/* ANDROID CHANGES START*/
+#ifdef ANDROID
+		sub_path = subpathname(dir_ent);
+		if (block_map_file && fragment->index == -1) {
+			write_block_map_entry(sub_path, start_block, total_size, mount_point, block_map_file);
+		}
+#endif
+/* ANDROID CHANGES END */
 	}
 	else if(type == SQUASHFS_LREG_TYPE) {
+/* ANDROID CHANGES START*/
+#ifdef ANDROID
+		unsigned long long total_size = 0;
+		char *sub_path;
+#endif
+/* ANDROID CHANGES END */
 		int i;
 		struct squashfs_lreg_inode_header *reg = &inode_header.lreg;
 		size_t off = offsetof(struct squashfs_lreg_inode_header, block_list);
@@ -955,8 +999,18 @@ int create_inode(squashfs_inode *i_no, struct dir_info *dir_info,
 			"blocks %d, fragment %d, offset %d, size %d, nlink %d"
 			"\n", byte_size, start_block, offset, fragment->index,
 			fragment->offset, fragment->size, nlink);
-		for(i = 0; i < offset; i++)
+		for(i = 0; i < offset; i++) {
 			TRACE("Block %d, size %d\n", i, block_list[i]);
+			total_size += SQUASHFS_COMPRESSED_SIZE_BLOCK(block_list[i]);
+		}
+/* ANDROID CHANGES START*/
+#ifdef ANDROID
+		sub_path = subpathname(dir_ent);
+		if (block_map_file && fragment->index == -1) {
+			write_block_map_entry(sub_path, start_block, total_size, mount_point, block_map_file);
+		}
+#endif
+/* ANDROID CHANGES END */
 	}
 	else if(type == SQUASHFS_LDIR_TYPE) {
 		int i;
@@ -2765,6 +2819,13 @@ int write_file_blocks(squashfs_inode *inode, struct dir_ent *dir_ent,
 	lock_fragments();
 
 	file_bytes = 0;
+/* ANDROID CHANGES START*/
+#ifdef ANDROID
+	if (align_4k_blocks && bytes % 4096) {
+		bytes += 4096 - (bytes % 4096);
+	}
+#endif
+/* ANDROID CHANGES END */
 	start = bytes;
 	for(block = 0; block < blocks;) {
 		if(read_buffer->fragment) {
@@ -5688,6 +5749,26 @@ print_compressor_options:
 			}
 			target_out_path = argv[i];
 		}
+		else if(strcmp(argv[i], "-disable-4k-align") == 0)
+			align_4k_blocks = FALSE;
+		else if(strcmp(argv[i], "-block-map") == 0) {
+			if(++i == argc) {
+				ERROR("%s: -block-map: missing path name\n",
+					argv[0]);
+				exit(1);
+			}
+			block_map_file = fopen(argv[i], "w");
+			if (block_map_file == NULL) {
+				ERROR("%s: -block-map: failed to open %s\n",
+					argv[0], argv[i]);
+				exit(1);
+			}
+			if (!align_4k_blocks) {
+				ERROR("WARNING: Using block maps with unaligned 4k blocks "
+					  "is not ideal as block map offsets are multiples of 4k, "
+					  "consider not passing -disable-4k-align\n");
+			}
+		}
 #endif
 /* ANDROID CHANGES END */
 
@@ -5766,6 +5847,8 @@ printOptions:
 				"enabled and source directory is not mount point\n");
 			ERROR("-product-out <path>\tPRODUCT_OUT directory to "
 				"read device specific FS rules files from\n");
+			ERROR("-disable-4k-align \tDon't 4k align data blocks. Default is false\n");
+			ERROR("-block-map <path>\tGenerate a block map for non-fragment files\n");
 #endif
 /* ANDROID CHANGES END */
 			ERROR("\nFilesystem filter options:\n");
@@ -6208,6 +6291,13 @@ printOptions:
 
 	set_progressbar_state(FALSE);
 	write_filesystem_tables(&sBlk, nopad);
+
+/* ANDROID CHANGES START*/
+#ifdef ANDROID
+	if (block_map_file)
+		fclose(block_map_file);
+#endif
+/* ANDROID CHANGES END */
 
 	return 0;
 }
