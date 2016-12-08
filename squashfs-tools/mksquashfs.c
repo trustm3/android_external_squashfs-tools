@@ -863,11 +863,29 @@ static inline unsigned int get_parent_no(struct dir_info *dir)
 
 /* ANDROID CHANGES START*/
 #ifdef ANDROID
+
+/* Round up the passed |n| value to the smallest multiple of 4096 greater or
+ * equal than |n| and return the 4K-block number for that value. */
+static unsigned long long round_up_block(unsigned long long n) {
+	const unsigned long long kMapBlockSize = 4096;
+	return (n + kMapBlockSize - 1) / kMapBlockSize;
+}
+
 static inline void write_block_map_entry(char *sub_path, unsigned long long start_block, unsigned long long total_size,
 		char * mount_point, FILE *block_map_file) {
 	if (block_map_file) {
-		unsigned long long round_start = (start_block + (1 << 12) - 1) >> 12;
-		unsigned long long round_end = ((start_block + total_size) >> 12) - 1;
+		/* We assign each 4K block based on what file the first byte of the block
+		 * belongs to. The current file consists of the chunk of bytes in the
+		 * interval [start_block, start_block + total_size), (closed on the left end
+		 * and open on the right end). We then compute the first block whose first
+		 * byte is equal to or greater than start_block as |round_start| and then
+		 * the first block whose first byte is *past* this interval, as
+		 * |round_end + 1|. This means that the blocks that should be assigned to
+		 * the current file are in the interval [round_start, round_end + 1), or
+		 * simply [round_start, round_end].
+		 */
+		unsigned long long round_start = round_up_block(start_block);
+		unsigned long long round_end = round_up_block(start_block + total_size) - 1;
 		if (round_start && total_size && round_start <= round_end) {
 			fprintf(block_map_file, "/%s", mount_point);
 			if (sub_path[0] != '/') fprintf(block_map_file, "/");
